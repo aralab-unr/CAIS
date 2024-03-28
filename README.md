@@ -5,7 +5,7 @@
     <img src="./pic/robot.jpg" alt="drawing" width="800"/>
 </p>
 
-# Dependencies
+## Dependencies
 The framework has been tested with ROS Noetic and Ubuntu 20.04. The following configuration, along with the required dependencies, has been verified for compatibility:
 
 - [Ubuntu 20.04](https://releases.ubuntu.com/focal/)
@@ -13,6 +13,10 @@ The framework has been tested with ROS Noetic and Ubuntu 20.04. The following co
 - [ZED SDK >= 3.5](https://www.stereolabs.com/developers)
 - [CUDA](https://developer.nvidia.com/cuda-downloads) (Recommend to use CUDA toolkit >= 11 for Ubuntu 20.04)
 
+## Flowchart
+<p align='center'>
+    <img src="./pic/flowchart.png" alt="drawing" width="800"/>
+</p>
 
 ## Visual and Condition Assessment
 Indoor            |  Outdoor
