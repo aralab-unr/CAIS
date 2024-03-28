@@ -13,17 +13,17 @@ The framework has been tested with ROS Noetic and Ubuntu 20.04. The following co
 - [ZED SDK >= 3.5](https://www.stereolabs.com/developers)
 - [CUDA](https://developer.nvidia.com/cuda-downloads) (Recommend to use CUDA toolkit >= 11 for Ubuntu 20.04)
 
-## Flowchart
-<p align='center'>
-    <img src="./pic/flowchart.png" alt="drawing" width="800"/>
-</p>
-
 ## ROS package
 - [zed_ros-wrapper](https://github.com/stereolabs/zed-ros-wrapper)
 - [zed-ros-example](https://github.com/stereolabs/zed-ros-examples)
 - [ros_numpy](https://github.com/eric-wieser/ros_numpy)
 - [cv_bridge](https://github.com/ros-perception/vision_opencv)
 - [velodyne](https://github.com/ros-drivers/velodyne)
+
+## Flowchart
+<p align='center'>
+    <img src="./pic/flowchart.png" alt="drawing" width="800"/>
+</p>
 
 ## Install
 Use the following commands to download and build the package: (The code is implemented in ROS1)
