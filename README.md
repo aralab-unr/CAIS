@@ -19,6 +19,8 @@ The framework has been tested with ROS Noetic and Ubuntu 20.04. The following co
 - [ros_numpy](https://github.com/eric-wieser/ros_numpy)
 - [cv_bridge](https://github.com/ros-perception/vision_opencv)
 - [velodyne](https://github.com/ros-drivers/velodyne)
+- [culvert_explore]() (based on [explore_lite](https://github.com/UOW-SECTE-477/explore_lite))
+- [detection]()
 
 ## Flowchart
 <p align='center'>
