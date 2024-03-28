@@ -14,7 +14,7 @@ The framework has been tested with ROS Noetic and Ubuntu 20.04. The following co
 - [CUDA](https://developer.nvidia.com/cuda-downloads) (Recommend to use CUDA toolkit >= 11 for Ubuntu 20.04)
 
 
-## Culvert Output
+## Visual and Condition Assessment
 Indoor            |  Outdoor
 :-------------------------:|:-------------------------:
 ![](https://github.com/aralab-unr/CAIS/blob/main/pic/fusion.jpg)  |  ![](https://github.com/aralab-unr/CAIS/blob/main/pic/fusion_outdoor.jpg)
