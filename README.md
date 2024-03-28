@@ -23,6 +23,9 @@ The framework has been tested with ROS Noetic and Ubuntu 20.04. The following co
 - [velodyne](https://github.com/ros-drivers/velodyne)
 - [culvert_explore]() (based on [explore_lite](https://github.com/UOW-SECTE-477/explore_lite))
 - [detection]() (autonomous inspection node)
+- [gmapping](https://github.com/ros-perception/slam_gmapping)
+- [rosserial](https://github.com/ros-drivers/rosserial)
+- [rosserial_arduino](http://wiki.ros.org/rosserial_arduino/Tutorials/Arduino%20IDE%20Setup)
 
 ## Flowchart
 <p align='center'>
