@@ -17,6 +17,7 @@ The framework has been tested with ROS Noetic and Ubuntu 20.04. The following co
 ## ROS package
 - [zed_ros-wrapper](https://github.com/stereolabs/zed-ros-wrapper)
 - [zed-ros-example](https://github.com/stereolabs/zed-ros-examples)
+- [roverrobotics_ros1](https://github.com/RoverRobotics/roverrobotics_ros1)
 - [ros_numpy](https://github.com/eric-wieser/ros_numpy)
 - [cv_bridge](https://github.com/ros-perception/vision_opencv)
 - [velodyne](https://github.com/ros-drivers/velodyne)
