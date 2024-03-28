@@ -23,6 +23,7 @@ The framework has been tested with ROS Noetic and Ubuntu 20.04. The following co
 - [zed-ros-example](https://github.com/stereolabs/zed-ros-examples)
 - [ros_numpy](https://github.com/eric-wieser/ros_numpy)
 - [cv_bridge](https://github.com/ros-perception/vision_opencv)
+- [velodyne](https://github.com/ros-drivers/velodyne)
 
 ## Install
 Use the following commands to download and build the package: (The code is implemented in ROS1)
