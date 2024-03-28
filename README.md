@@ -12,6 +12,7 @@ The framework has been tested with ROS Noetic and Ubuntu 20.04. The following co
 - [ROS Noetic](http://wiki.ros.org/noetic/Installation/Ubuntu) 
 - [ZED SDK >= 3.5](https://www.stereolabs.com/developers)
 - [CUDA](https://developer.nvidia.com/cuda-downloads) (Recommend to use CUDA toolkit >= 11 for Ubuntu 20.04)
+- [ultralytics](https://github.com/ultralytics)
 
 ## ROS package
 - [zed_ros-wrapper](https://github.com/stereolabs/zed-ros-wrapper)
