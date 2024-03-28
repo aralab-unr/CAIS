@@ -18,6 +18,18 @@ The framework has been tested with ROS Noetic and Ubuntu 20.04. The following co
     <img src="./pic/flowchart.png" alt="drawing" width="800"/>
 </p>
 
+## Install
+Use the following commands to download and build the package: (The code is implemented in ROS1)
+
+```
+    mkdir -p ~/catkin_ws/src
+    cd ~/caktin_ws/src    // caktin_ws or your ROS Dir
+    git clone https://github.com/aralab-unr/CAIS.git
+    cd ..
+    catkin build
+    source devel/setup.bash
+```
+
 ## Visual and Condition Assessment
 Indoor            |  Outdoor
 :-------------------------:|:-------------------------:
