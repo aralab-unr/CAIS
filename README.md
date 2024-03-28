@@ -12,3 +12,9 @@ The framework has been tested with ROS Noetic and Ubuntu 20.04. The following co
 - [ROS Noetic](http://wiki.ros.org/noetic/Installation/Ubuntu) (```roscpp```, ```std_msgs```, ```sensor_msgs```, ```geometry_msgs```)
 - [ZED SDK >= 3.5](https://www.stereolabs.com/developers)
 - [CUDA](https://developer.nvidia.com/cuda-downloads) (Recommend to use CUDA toolkit >= 11 for Ubuntu 20.04)
+
+
+## Culvert Output
+Indoor            |  Outdoor
+:-------------------------:|:-------------------------:
+![](https://...Dark.png)  |  ![](https://...Ocean.png)
