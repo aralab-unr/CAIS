@@ -40,6 +40,11 @@ Use the following commands to download and build the package: (The code is imple
     catkin build
     source devel/setup.bash
 ```
+## Run the package
+```
+    roslaunch detection auto_pro.launch
+
+```
 
 ## Visual and Condition Assessment
 Indoor            |  Outdoor
