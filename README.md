@@ -17,4 +17,4 @@ The framework has been tested with ROS Noetic and Ubuntu 20.04. The following co
 ## Culvert Output
 Indoor            |  Outdoor
 :-------------------------:|:-------------------------:
-![](https://...Dark.png)  |  ![](https://...Ocean.png)
+![](https://github.com/aralab-unr/CAIS/blob/main/pic/fusion.jpg)  |  ![](https://github.com/aralab-unr/CAIS/blob/main/pic/fusion_outdoor.jpg)
