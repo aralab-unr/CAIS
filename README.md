@@ -54,3 +54,7 @@ Use the following commands to download and build the package: (The code is imple
 Indoor            |  Outdoor
 :-------------------------:|:-------------------------:
 ![](https://github.com/aralab-unr/CAIS/blob/main/pic/fusion.jpg)  |  ![](https://github.com/aralab-unr/CAIS/blob/main/pic/fusion_outdoor.jpg)
+
+## Contact
+- [Chuong Le](mailto:cle@nevada.unr.edu)
+- [Hung La](mailto:hla@nevada.unr.edu)
