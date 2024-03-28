@@ -22,8 +22,9 @@ The framework has been tested with ROS Noetic and Ubuntu 20.04. The following co
 Use the following commands to download and build the package: (The code is implemented in ROS1)
 
 ```
-    mkdir -p ~/catkin_ws/src
-    cd ~/caktin_ws/src    // caktin_ws or your ROS Dir
+    /* caktin_ws or your workspace dir */ 
+    mkdir -p ~/catkin_ws/src 
+    cd ~/caktin_ws/src    
     git clone https://github.com/aralab-unr/CAIS.git
     cd ..
     catkin build
