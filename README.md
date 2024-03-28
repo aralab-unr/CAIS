@@ -9,7 +9,7 @@
 The framework has been tested with ROS Noetic and Ubuntu 20.04. The following configuration, along with the required dependencies, has been verified for compatibility:
 
 - [Ubuntu 20.04](https://releases.ubuntu.com/focal/)
-- [ROS Noetic](http://wiki.ros.org/noetic/Installation/Ubuntu) (```roscpp```, ```std_msgs```, ```sensor_msgs```, ```geometry_msgs```)
+- [ROS Noetic](http://wiki.ros.org/noetic/Installation/Ubuntu) 
 - [ZED SDK >= 3.5](https://www.stereolabs.com/developers)
 - [CUDA](https://developer.nvidia.com/cuda-downloads) (Recommend to use CUDA toolkit >= 11 for Ubuntu 20.04)
 
