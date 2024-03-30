@@ -1,0 +1,8 @@
+<launch>
+<arg name="path" default="$(find detection)/bag/outdoor_2024-03-09-16-28-02.bag"/>
+  <node pkg="rosbag" type="play" name="rosbag" required="true" args="$(find detection)/bag/outdoor_2024-03-09-16-28-02.bag"/>
+  <node name="extract" pkg="image_view" type="extract_images" respawn="false" required="true" output="screen" cwd="ROS_HOME">
+    <remap from="image" to="/zed/zed_nodelet/rgb/image_rect_color"/>
+    <param name="sec_per_frame" value = "0.5"/>
+  </node>
+</launch>

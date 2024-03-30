@@ -1,0 +1,10 @@
+<launch>
+
+  <!-- start simulation -->
+  <include file="$(find turtlebot3_gazebo)/launch/turtlebot3_world.launch"/>
+  <!-- start 2d mapping -->
+  <include file="$(find turtlebot3_slam)/launch/turtlebot3_slam.launch"/>
+  <!-- navigation stack move_base -->
+  <include file="$(find turtlebot3_navigation)/launch/move_base.launch"/>
+
+</launch>

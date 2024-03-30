@@ -1,0 +1,12 @@
+<launch>
+
+
+    <include file="$(find detection)/launch/gmapping.launch"/>
+    <include file="$(find culvert_explore)/launch/explore.launch"/>
+    <node pkg="detection" type="detection_new.py" name="detection" output="screen"/>
+    <!-- <node pkg="detection" type="detection_out.py" name="detection" output="screen"/> -->
+    <!-- <node pkg="detection" type="defect_process.py" name="detection" output="screen"/> -->
+    
+
+    <!-- <node type="rviz" name="rviz" pkg="rviz" args="-d $(find detection)/rviz/rviz.rviz" /> -->
+</launch>

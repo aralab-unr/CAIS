@@ -1,0 +1,33 @@
+<launch>
+    
+    <arg name="rtabmap_args" default="--delete_db_on_start"/>
+    
+    <include file="$(find roverrobotics_driver)/launch/pro.launch"/>      
+    <node pkg="rosserial_python" type="serial_node.py" name="rosserial" output="screen">
+        <param name="port" value="/dev/ttyUSB1" />
+    </node>
+    
+    <node pkg="detection" type="culbot.py" name="cull" output="screen"/>
+    <include file="$(find zed_nodelet_example)/launch/zed_laserscan_nodelet.launch"/>    
+    
+    <include file="$(find detection)/launch/frontier_defect.launch"/>      
+
+    <include file="$(find rtabmap_launch)/launch/rtabmap.launch">
+        <arg name="rtabmap_args" value="$(arg rtabmap_args)"/>
+        <arg name="rgb_topic" value="/zed/zed_nodelet/rgb/image_rect_color"/>
+        <arg name="depth_topic" value="/zed/zed_nodelet/depth/depth_registered"/>
+        <arg name="camera_info_topic" value="/zed/zed_nodelet/rgb/camera_info"/>
+        <arg name="frame_id" value="base_link"/>
+        <arg name="approx_sync" value="true"/>
+        <arg name="wait_imu_to_init" value="true"/>
+        <arg name="imu_topic" value="/zed/zed_nodelet/imu/data"/>
+        <arg name="rgbd_sync" value="true"/>
+        <arg name="approx_rgbd_sync" value="false"/>
+
+        <arg name="rviz" value="true"/>
+        <arg name="rtabmap_viz" value="false"/>
+    </include>
+
+    <node type="rviz" name="rviz" pkg="rviz" args="-d $(find detection)/rviz/rviz.rviz" />
+
+</launch>
