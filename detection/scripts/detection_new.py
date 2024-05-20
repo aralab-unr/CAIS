@@ -290,6 +290,8 @@ class defect_detection:
         self.lin_tol = 0.06
         self.ang_tol = 0.1
         self.cur_def_ind = -1
+        self.discount = 0.9
+        self.reward = 0
         # 0 = MOVE, 1 = DECLARE, 2 = SEARCH
         self.action = 0
         self.lin_control = PDController(0.1,0.0) # 0.25, 0
@@ -518,7 +520,7 @@ class defect_detection:
                         # break then skip
                         _,_, w, h = loc.flatten().astype('int32')
                         # update B
-                        i.setB(   (((w*h)/(540*960)) * box.boxes.conf.item() * np.sum(self.prob_action[self.action]))  * i.getB() *1000)
+                        i.setB(   (((w*h)/(540*960)) * box.boxes.conf.item() * np.sum(self.prob_action[self.action]))  * i.getB() *2000)
                         skip_to_next_box = True
                         break                
                 if skip_to_next_box:
@@ -529,8 +531,7 @@ class defect_detection:
                 if self.vis_def_area:
                     defect.setCornersPose(corner_pose_list[0],corner_pose_list[1],corner_pose_list[2],corner_pose_list[3])
                 _,_, w, h = loc.flatten().astype('int32')
-                defect.setB(   (((w*h)/(540*960)) * box.boxes.conf.item() * np.sum(self.prob_action[self.action]))  * defect.getB()*1000)
-                print((((w*h)/(540*960)) * box.boxes.conf.item() * np.sum(self.prob_action[self.action]))  * defect.getB()*1000)
+                defect.setB(   (((w*h)/(540*960)) * box.boxes.conf.item() * np.sum(self.prob_action[self.action]))  * defect.getB()*2000)
                 if self.robot_y > y:
                     # due to the set up of culvert, 0 can never = y since y is wall and robot can't have same position as
                     # wall unless it smash through it
@@ -676,11 +677,14 @@ class defect_detection:
             #         self.action = -1
             #         break
             # return
+            log = False
             if getKey() == '0':  
                 rospy.logwarn("done, I'm out    ") 
                 self.action = 0
             else:
-                rospy.logwarn("manual")
+                if not log:
+                    rospy.logwarn("manual, press 0 when done")
+                    log = True
             return
         
         """TODO: test to make sure goTo is good"""
@@ -689,10 +693,8 @@ class defect_detection:
             # rospy.logwarn("go")
             # RVIZ
             if self.vis_def_area or self.vis_reach:
-                print("Belief")
                 for de in self.list_def_state:
                     self.visualizeDefect(de)
-                    print(de.getB())
                 if self.vis_def_area:
                     self.vis_pub.publish(self.border_ar)
                 if self.vis_reach:
@@ -726,6 +728,7 @@ class defect_detection:
                 # if reach, next action which is turning
                 if self.list_def_state[closest_index].getB() > 1:
                     self.action = 1
+                    self.reward += (100 + 5) * self.discount
                 else:
                     print("B not high enough")
                 
