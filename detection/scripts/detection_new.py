@@ -92,7 +92,7 @@ def shortest_angular_difference(angle1, angle2):
     error_rad = np.arctan2(np.sin(delta_angle), np.cos(delta_angle))
     return error_rad
 
-def turning(current_theta, angleToGoal,angular_speed = 1):
+def turning(current_theta, angleToGoal,angular_speed = 0.17):
     cmd_angular_z = 0  # This will hold the angular speed to return
 
     if angleToGoal >= 0 and current_theta >= 0:  # positive/on the right
@@ -238,7 +238,7 @@ class PDController:
         delta_time = (current_time - self.last_time).to_sec()
         if delta_time <= 0:
             # Prevent division by zero and ensure delta_time is positive
-            print("DELTA_T IS NEGATIVE")
+            # print("DELTA_T IS NEGATIVE")
             return 0
         
         derivative = (current_error - self.previous_error) / delta_time
@@ -254,7 +254,7 @@ class PDController:
         delta_time = (current_time - self.last_time).to_sec()
         if delta_time <= 0:
             # Prevent division by zero and ensure delta_time is positive
-            print("DELTA_T IS NEGATIVE")
+            # print("DELTA_T IS NEGATIVE")
             return 0
         neg = -1
         current_error = shortest_angular_difference(current,goal)
@@ -272,6 +272,7 @@ class PDController:
     
 class defect_detection:
     def __init__(self):
+        self.start = False
         self.bridge = CvBridge()
         self.cloud_map = None
         self.cloud_header = None
@@ -289,15 +290,15 @@ class defect_detection:
         self.lin_tol = 0.06
         self.ang_tol = 0.1
         self.cur_def_ind = -1
-        # 1 = turn, 2 = ER
-        self.action = -1
+        # 0 = MOVE, 1 = DECLARE, 2 = SEARCH
+        self.action = 0
         self.lin_control = PDController(0.1,0.0) # 0.25, 0
         self.ang_control = PDController(1.8,0.3)
         self.speed_ar = []
         self.frontier = np.array([])
         self.black_list = []
         self.def_index_black_list = []
-
+        self.start = False
         self.rate = rospy.Rate(10)  # 10hz
         self.odom_icp_sub = rospy.Subscriber("/zed/zed_nodelet/odom", Odometry, self.odomCallBack)
         self.frontier_sub = rospy.Subscriber("/explore/frontiers", MarkerArray, self.frontierCallBack)   
@@ -311,7 +312,8 @@ class defect_detection:
         self.ts.registerCallback(self.callback)
 
         self.vis_pub = rospy.Publisher("potential_defect", MarkerArray, queue_size=1)
-        self.cmd_pub = rospy.Publisher("cmd_vel", Twist, queue_size=1)
+        self.text_pub = rospy.Publisher("text", MarkerArray, queue_size=1)
+        self.cmd_pub = rospy.Publisher("smoother_cmd_vel", Twist, queue_size=1)
         self.target_pub = rospy.Publisher("target", Marker, queue_size=1)
         # self.arm_pub_ = rospy.Publisher('J1', Int32, queue_size=5)
         # self.lin_pub_ = rospy.Publisher('J2', Int32, queue_size=5)
@@ -330,7 +332,9 @@ class defect_detection:
         self.begin = rospy.Time.now()
         
         # YOLO
-        model_path = "/home/ara/catkin_ws/src/detection/model/m_cul1+2.pt" 
+        #model_path = "/home/ara/catkin_ws/src/detection/model/m_cul1+2.pt" 
+        #model_path = "/home/ara/bunker_ws/src/detection/model/e200.pt"
+        model_path = "/home/ara/catkin_ws/src/detection/model/m_acul2.pt"
         print('load model.......')
         self.model = YOLO(model_path)
         print('model loaded')
@@ -341,13 +345,20 @@ class defect_detection:
         self.tf_buffer = tf2_ros.Buffer()
         self.t1= tf2_ros.TransformListener(self.tf_buffer)
 
+        # Pr(s', s, Action)
+        self.prob_action = np.array([
+            [0.95, 0.8, 0],     # MOVE
+            [0.9, 0.92, 0],     # DECLARE
+            [0.95, 0.2, 0.9]    # SEARCH
+        ])
+        
+
         self.start = False
         # wait for message before doing anything
         rospy.wait_for_message("/zed/zed_nodelet/rgb/image_rect_color", Image)
         rospy.wait_for_message("/zed/zed_nodelet/point_cloud/cloud_registered", PointCloud2)
         rospy.wait_for_message("/zed/zed_nodelet/odom", Odometry)
         rospy.wait_for_message("/explore/frontiers", MarkerArray)
-
         
         self.start = True
         rospy.on_shutdown(self.publish_velocity)
@@ -416,7 +427,7 @@ class defect_detection:
             print(e)
             return
         
-        self.xyz_array = ros_numpy.point_cloud2.pointcloud2_to_xyz_array(cloud)
+        self.xyz_array = ros_numpy.point_cloud2.pointcloud2_to_xyz_array(cloud,False)
         self.cloud_map = cloud
 
         # get detection
@@ -448,6 +459,8 @@ class defect_detection:
                 # get center pose
                 r = loc.flatten().astype('int32')[1]
                 c = loc.flatten().astype('int32')[0]
+                #print("shape: ", self.xyz_array.shape)
+                #print("r,c", r, c)
                 x_val, y_val, z_val = self.xyz_array[r,c]
                 # print(self.xyz_array[0,0].shape)
                 # xyz_array = np.squeeze(self.xyz_array)
@@ -455,6 +468,7 @@ class defect_detection:
                 # center pose or corner pose is not real number, skip to next
                 # print(in)
                 # if not all_real(x_val, y_val, z_val) or skip_to_next_box or not inRange(x_val, y_val):
+                #print(x_val, y_val, z_val)
                 if not all_real(x_val, y_val, z_val):
                     rospy.logwarn("pose not real (%.2f,%.2f,%.2f), looks surrounding", x_val, y_val, z_val)
                     continue
@@ -503,24 +517,26 @@ class defect_detection:
                     if distance < 1 and int(box.boxes.cls.item()) == int(i.getClass()):
                         # break then skip
                         _,_, w, h = loc.flatten().astype('int32')
-                        i.setB(  i.getB() * ( (w*h)/(540*960) )    )
+                        # update B
+                        i.setB(   (((w*h)/(540*960)) * box.boxes.conf.item() * np.sum(self.prob_action[self.action]))  * i.getB() *1000)
                         skip_to_next_box = True
                         break                
                 if skip_to_next_box:
                     continue    
-                # if meet all condition, then save it
+                # if meet all condition, then save it as a NEW
                 defect = obs_def_(self.index, box.boxes.cls.item(), box.boxes.conf.item(), loc.flatten().astype('int32'))
                 defect.setPose((x,y,z))
                 if self.vis_def_area:
                     defect.setCornersPose(corner_pose_list[0],corner_pose_list[1],corner_pose_list[2],corner_pose_list[3])
                 _,_, w, h = loc.flatten().astype('int32')
-                defect.setB(  defect.getB() * ( (w*h)/(540*960) )    )
+                defect.setB(   (((w*h)/(540*960)) * box.boxes.conf.item() * np.sum(self.prob_action[self.action]))  * defect.getB()*1000)
+                print((((w*h)/(540*960)) * box.boxes.conf.item() * np.sum(self.prob_action[self.action]))  * defect.getB()*1000)
                 if self.robot_y > y:
                     # due to the set up of culvert, 0 can never = y since y is wall and robot can't have same position as
                     # wall unless it smash through it
-                    reach = (x,y+(0.83*0.95),0) 
+                    reach = (x,y+(0.85*0.95),0) 
                 else:
-                    reach = (x,y-(0.83*0.8),0) 
+                    reach = (x,y-(0.8*0.95),0) 
                 defect.setReach(reach)
                 # put in                 
                 self.list_def_state.append(defect)
@@ -550,8 +566,8 @@ class defect_detection:
         if not self.start:
             rospy.logwarn("Not yet")
             return
-        return
-        if (rospy.Time.now() - self.begin).to_sec() < 1:
+        
+        if (rospy.Time.now() - self.begin).to_sec() < 2:
             rospy.logwarn_once("waiting: %d", (rospy.Time.now() - self.begin).to_sec())
             return
         # print(getKey())
@@ -563,9 +579,9 @@ class defect_detection:
         #     self.action = 1
         # return
         # return
-        if len(self.def_index_black_list) > 3: 
-            rospy.logwarn("OVER 2")
-            return
+        # if len(self.def_index_black_list) > 3: 
+        #     rospy.logwarn("Done")
+        #     return
 
         # when u reach turn
         # if self.action == 1:
@@ -660,20 +676,12 @@ class defect_detection:
             #         self.action = -1
             #         break
             # return
-            if getKey() == '0':
-                self.action = -1     
+            if getKey() == '0':  
                 rospy.logwarn("done, I'm out    ") 
+                self.action = 0
             else:
                 rospy.logwarn("manual")
             return
-        if getKey() == '9':
-            while True:
-                self.publish_velocity(0,0)
-                if getKey() == '0':
-                    rospy.logwarn("out    ") 
-                    break
-                else:
-                    rospy.logerr("stop    ") 
         
         """TODO: test to make sure goTo is good"""
         # if there's a potential defect
@@ -681,12 +689,16 @@ class defect_detection:
             # rospy.logwarn("go")
             # RVIZ
             if self.vis_def_area or self.vis_reach:
+                print("Belief")
                 for de in self.list_def_state:
                     self.visualizeDefect(de)
-            if self.vis_def_area:
-                self.vis_pub.publish(self.border_ar)
-            if self.vis_reach:
-                self.vis_pub.publish(self.reach_ar)
+                    print(de.getB())
+                if self.vis_def_area:
+                    self.vis_pub.publish(self.border_ar)
+                if self.vis_reach:
+                    self.vis_pub.publish(self.reach_ar)
+                if self.vis_b:
+                    self.text_pub.publish(self.text_ar)
 
             # if there's only 1 then min_index = 0 
             closest_index = 0
@@ -710,13 +722,13 @@ class defect_detection:
             # get goal
             (goal_x, goal_y) = self.list_def_state[closest_index].getReach2D()
             if (self.goTo(goal_x, goal_y)):
-                # if reach, next action which is turning
-                self.action = 1
-                """TODO: 1 create a fake complete action to test decision using manual
-                         comment out the self.publish_velocity()
-                         blacklist defect index
-                """
                 rospy.logwarn("REACH GOAL %d", closest_index)
+                # if reach, next action which is turning
+                if self.list_def_state[closest_index].getB() > 1:
+                    self.action = 1
+                else:
+                    print("B not high enough")
+                
                 # add to defect black list to 
                 rospy.logwarn("appending index %d", closest_index)
                 self.def_index_black_list.append(closest_index)
@@ -728,10 +740,12 @@ class defect_detection:
         # if no defect, then frontier
         else:
             rospy.logwarn("frontier")
+            self.action = 2
             # go to the frontier already sorted by weight
             if self.goTo(self.frontier[0,0], self.frontier[0,1]):
                 # blacklist the frontier when reach                
                 self.black_list.append(self.frontier[0])
+                self.action = 0
 
 
     def goTo(self, x, y):
@@ -757,12 +771,12 @@ class defect_detection:
 
         if angle_diff >= 0.25:
             ang_vel = round(self.ang_control.updateAng(self.yaw, angleToGoal),5) #* turning(self.yaw, angleToGoal)
-            rospy.logwarn("yaw: %.2f, atg: %.2f, angl diff: %.2f, ang_vel: %.2f", np.degrees(self.yaw), np.degrees(angleToGoal), np.degrees(angle_diff), ang_vel)
+            # rospy.logwarn("yaw: %.2f, atg: %.2f, angl diff: %.2f, ang_vel: %.2f", np.degrees(self.yaw), np.degrees(angleToGoal), np.degrees(angle_diff), ang_vel)
             lin_vel = 0
         if angle_diff < 0.25:
             ang_vel =0
-            lin_vel = self.lin_control.update(distance)
-            rospy.logwarn("lin_vel: %.2f", lin_vel)
+            lin_vel = 0.06#self.lin_control.update(distance)
+            # rospy.logwarn("lin_vel: %.2f", lin_vel)
 
         self.publish_velocity(lin_vel, ang_vel)
         return False
@@ -786,11 +800,11 @@ class defect_detection:
         if abs(angleToGoal - self.yaw) > self.ang_tol:
             ang_vel = turning(self.yaw, angleToGoal)
         elif abs(angleToGoal - self.yaw) < 0.3:
-            ang_vel = turning(self.yaw, angleToGoal, 0.1)
+            ang_vel = turning(self.yaw, angleToGoal, 0.13)
             # rospy.logwarn("ang_vel: %.2f", ang_vel)
         # forward if distance above ang_tol, combine with turn if angle diff close to ang_tol
         if distance > self.lin_tol and abs(angleToGoal - self.yaw) < 0.3 and abs(angleToGoal - self.yaw) > self.ang_tol:
-            lin_vel = 0.1
+            lin_vel = 0.05
         
         # check if goal reached
         if distance <= self.lin_tol:
@@ -897,15 +911,17 @@ class defect_detection:
 
         if self.vis_b:
             text_marker = Marker()
+            text_marker.id = 1000 + obs_def_instance.getIndex()
             text_marker.header.frame_id= frame_id
             text_marker.type = Marker.TEXT_VIEW_FACING
             text_marker.action = Marker.ADD
-            text_marker.pose.position.x = obs_def_instance.getReach()[0]
+            text_marker.text = str(round(obs_def_instance.getB(),5))
+            text_marker.pose.position.x = obs_def_instance.getReach()[0] + 0.1
             text_marker.pose.position.y = obs_def_instance.getReach()[1] 
             text_marker.pose.position.z = obs_def_instance.getReach()[2]  
             text_marker.color = color
-            text_marker.scale.x = 0.1
-            self.text_ar.append(text_marker)
+            text_marker.scale.z = 0.1
+            self.text_ar.markers.append(text_marker)
 
 if __name__ == '__main__':
     print('START')
