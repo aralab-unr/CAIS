@@ -162,7 +162,7 @@ class obs_def_:
         self.c1 = (0,0)
         self.c2 = (0,0)
         self.c3 = (0,0)
-        
+        self.p = p
 
         self.c0_pose = (0,0,0)
         self.c1_pose = (0,0,0)
@@ -172,8 +172,17 @@ class obs_def_:
         self.reach = None
 
         self.b = 1.0
-        (H,W) = (540,960)      
+        (H,W) = (540,960)  
+    def getP(self):
+        return self.p  
+    def setP(self, p):
+        self.p = p  
     # pixel (x,y)
+    def getWH(self):
+        return (self.w, self.h)
+    def setWH(self, w, h):
+        self.w = w 
+        self.h = h
     def getCenter(self):
         return (self.x,self.y)        
     # set center pose
@@ -435,7 +444,7 @@ class defect_detection:
         # get detection
         results = self.model(source=self.rgb_map, verbose=False)
         
-        # norm
+        # norm equation
         norm = 0
         for box in results[0]: 
             loc = box.boxes.xywh.cpu()
@@ -526,8 +535,15 @@ class defect_detection:
                 if distance < 1 and int(box.boxes.cls.item()) == int(i.getClass()):
                     # break then skip
                     _,_, w, h = loc.flatten().astype('int32')
+                    # update Pit 
+                    (w_old, h_old) = i.getWH()
+                    Pit = w_old * h_old * i.getP()
+                    # update Pi't 
+                    Pi_prime_t = (Pit + (w - w_old) * (h - h_old)) 
                     # update B
-                    i.setB(   (((w*h)/norm) * box.boxes.conf.item() * np.sum(self.prob_action[self.action]))  * i.getB()*4)
+                    i.setB(   (((Pi_prime_t)/norm) * box.boxes.conf.item() * np.sum(self.prob_action[self.action]))  * i.getB()*10)
+                    i.setWH(w,h)
+                    i.setP(box.boxes.conf.item())
                     skip_to_next_box = True
                     break                
             if skip_to_next_box:
@@ -538,7 +554,9 @@ class defect_detection:
             if self.vis_def_area:
                 defect.setCornersPose(corner_pose_list[0],corner_pose_list[1],corner_pose_list[2],corner_pose_list[3])
             _,_, w, h = loc.flatten().astype('int32')
+            # initial
             defect.setB(   (((w*h)/norm) * box.boxes.conf.item() * np.sum(self.prob_action[self.action]))  * defect.getB())
+            defect.setWH(w,h)
             if self.robot_y > y:
                 # due to the set up of culvert, 0 can never = y since y is wall and robot can't have same position as
                 # wall unless it smash through it
