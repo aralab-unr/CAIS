@@ -365,7 +365,7 @@ class defect_detection:
         self.lin_tol = 0.06
         self.ang_tol = 0.1
         self.cur_def_ind = -1
-        self.discount = 0.99
+        self.discount = 0.9999
         self.k = 1
         self.reward = 0
         # 0 = MOVE, 1 = DECLARE, 2 = SEARCH
