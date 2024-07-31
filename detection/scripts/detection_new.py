@@ -14,6 +14,7 @@ import message_filters
 import matplotlib.pyplot as plt
 from ultralytics import YOLO
 import numpy as np
+from scipy.stats import multivariate_normal
 import math
 import cv2
 import sys, select, termios, tty
@@ -162,7 +163,7 @@ class obs_def_:
         self.c1 = (0,0)
         self.c2 = (0,0)
         self.c3 = (0,0)
-        self.p = p
+        
 
         self.c0_pose = (0,0,0)
         self.c1_pose = (0,0,0)
@@ -170,24 +171,50 @@ class obs_def_:
         self.c3_pose = (0,0,0)
 
         self.reach = None
-
+        self.counter = 1
+        self.xyz_total = np.array([0.0,0.0,0.0])
+        d = 0.3
+        self.offsets = np.array([
+            [0, 0, 0],
+            [-d, -d, -d],
+            [-d, -d, 0],
+            [-d, -d, d],
+            [-d, 0, -d],
+            [-d, 0, 0],
+            [-d, 0, d],
+            [-d, d, -d],
+            [-d, d, 0],
+            [-d, d, d],
+            [0, -d, -d],
+            [0, -d, 0],
+            [0, -d, d],
+            [0, 0, -d],
+            [0, 0, d],
+            [0, d, -d],
+            [0, d, 0],
+            [0, d, d],
+            [d, -d, -d],
+            [d, -d, 0],
+            [d, -d, d],
+            [d, 0, -d],
+            [d, 0, 0],
+            [d, 0, d],
+            [d, d, -d],
+            [d, d, 0],
+            [d, d, d],
+        ])
+        self.uni = None
+        self.uni_b = np.full((self.offsets.shape[0],1), 1/self.offsets.shape[0])
+        self.total_p = 0
         self.b = 1.0
-        (H,W) = (540,960)  
-    def getP(self):
-        return self.p  
-    def setP(self, p):
-        self.p = p  
+        (H,W) = (540,960)      
     # pixel (x,y)
-    def getWH(self):
-        return (self.w, self.h)
-    def setWH(self, w, h):
-        self.w = w 
-        self.h = h
     def getCenter(self):
         return (self.x,self.y)        
-    # set center pose
+    # set center pose, called only when declared
     def setPose(self, p):
         self.pose = p    
+        self.uni = self.offsets + np.array(p)
     # get center pose
     def getPose(self):
         return self.pose
@@ -233,6 +260,45 @@ class obs_def_:
     # get b
     def getB(self):
         return self.b
+    # max belief index of uni
+    def getMaxB(self):
+        return np.max(self.uni_b)    
+    def getMaxBPose(self):
+        return self.uni[np.argmax(self.uni_b)]
+
+    def update(self, pose, p=1, sigma=0.5):
+        # in case there's nothing
+        if self.total_p != 0:
+                epsilon = self.total_p/self.counter
+        else:
+            epsilon = 1  
+
+        obs_prob = np.zeros((27,1))
+        # U \sum Pr (oi|hi,s) * Pr(hi|s)
+        if pose is None:
+            obs_prob += 0 * (1-epsilon)
+            pr_u = 0.999
+            obs_prob += pr_u * epsilon
+        # P \sum Pr (oi|hi,s) * Pr(hi|s)
+        else:
+            self.counter+= 1
+            self.total_p+=p
+            epsilon = self.total_p/self.counter
+            # self.xyz_total += np.array(pose)
+            covariance = np.array([[sigma**2, 0, 0], 
+                                [0, sigma**2, 0], 
+                                [0, 0, sigma**2]])  # 3D covariance matrix
+            # closest dist
+            distances = np.linalg.norm(self.uni - pose) 
+            for i in range(0,27):
+                obs_prob[i] = multivariate_normal.pdf(pose, mean=self.uni[i], cov=covariance) * epsilon
+            pr_p = 0.001
+            obs_prob += pr_p * (1-epsilon)            
+        # belief update
+        self.uni_b *= 1*obs_prob 
+        # norm
+        self.uni_b /= np.sum(self.uni_b)
+        print(self.index, self.total_p/self.counter, np.argmax(self.uni_b), np.max(self.uni_b))
 
 
 class PDController:
@@ -299,7 +365,8 @@ class defect_detection:
         self.lin_tol = 0.06
         self.ang_tol = 0.1
         self.cur_def_ind = -1
-        self.discount = 0.9
+        self.discount = 0.99
+        self.k = 1
         self.reward = 0
         # 0 = MOVE, 1 = DECLARE, 2 = SEARCH
         self.action = 0
@@ -444,129 +511,129 @@ class defect_detection:
         # get detection
         results = self.model(source=self.rgb_map, verbose=False)
         
-        # norm equation
+        # norm
         norm = 0
         for box in results[0]: 
             loc = box.boxes.xywh.cpu()
             loc = loc.numpy()
             _,_, w, h = loc.flatten().astype('int32')
             norm += (   (w*h)*box.boxes.conf.item() )
-
+        updated_b = []
         for box in results[0]:   
             skip_to_next_box = False              
             loc = box.boxes.xywh.cpu()
             loc = loc.numpy()
-            # get corners [c0,c1,c2,c3]
-            cs = boundingbox(loc.flatten().astype('int32'))
-            corner_pose_list = []
-            if self.vis_def_area:
-            # for each corner
-                for c in cs:
-                    x_val, y_val, z_val = self.xyz_array[c[1]][c[0]-2]
-                    # print(x_val, y_val, z_val)
-                    # check corners pose is real number
-                    if all_real(x_val, y_val, z_val):
-                        x,y,z = self.transform_point(x_val, y_val, z_val, "zed_left_camera_frame", "map")
-                        corner_pose_list.append((x,y,z))
-                    else:
-                        # skip if any is nan
-                        rospy.logwarn("corner not real")
-                        skip_to_next_box = True
-                        break
-            # print(corner_pose_list)
-            # get center pose
-            r = loc.flatten().astype('int32')[1]
-            c = loc.flatten().astype('int32')[0]
-            #print("shape: ", self.xyz_array.shape)
-            #print("r,c", r, c)
-            x_val, y_val, z_val = self.xyz_array[r,c]
-            # print(self.xyz_array[0,0].shape)
-            # xyz_array = np.squeeze(self.xyz_array)
-            # print(xyz_array.shape)
-            # center pose or corner pose is not real number, skip to next
-            # print(in)
-            # if not all_real(x_val, y_val, z_val) or skip_to_next_box or not inRange(x_val, y_val):
-            #print(x_val, y_val, z_val)
-            if not all_real(x_val, y_val, z_val):
-                rospy.logwarn("pose not real (%.2f,%.2f,%.2f), looks surrounding", x_val, y_val, z_val)
-                continue
-                xyz_array = np.squeeze(self.xyz_array)
+            if box.boxes.conf.item() >= 0.5:
+                # get corners [c0,c1,c2,c3]
+                cs = boundingbox(loc.flatten().astype('int32'))
+                corner_pose_list = []
+                if self.vis_def_area:
+                # for each corner
+                    for c in cs:
+                        x_val, y_val, z_val = self.xyz_array[c[1]][c[0]-2]
+                        # print(x_val, y_val, z_val)
+                        # check corners pose is real number
+                        if all_real(x_val, y_val, z_val):
+                            x,y,z = self.transform_point(x_val, y_val, z_val, "zed_left_camera_frame", "map")
+                            corner_pose_list.append((x,y,z))
+                        else:
+                            # skip if any is nan
+                            rospy.logwarn("corner not real")
+                            skip_to_next_box = True
+                            break
+                # print(corner_pose_list)
+                # get center pose
+                r = loc.flatten().astype('int32')[1]
+                c = loc.flatten().astype('int32')[0]
+                #print("shape: ", self.xyz_array.shape)
+                #print("r,c", r, c)
+                x_val, y_val, z_val = self.xyz_array[r,c]
+                # print(self.xyz_array[0,0].shape)
+                # xyz_array = np.squeeze(self.xyz_array)
                 # print(xyz_array.shape)
-                search_range = 10# Create a mask for valid and invalid pixels
-                valid_mask = ~np.isnan(xyz_array).any(axis=-1) & ~np.isinf(xyz_array).any(axis=-1)# Handling the edge cases by padding the valid_mask
-                padded_valid_mask = np.pad(valid_mask, pad_width=search_range, mode='constant', constant_values=False)# Finding a valid pixel:
-                # Instead of looking for the first valid pixel in spatial order,
-                # we identify any valid pixel within the range for demonstration purposes
-                # due to the complexity of replicating the exact loop behavior vectorized
-                r_padded, c_padded = r + search_range, c + search_range  # Adjust for padding offset# Search in the padded_valid_mask for valid pixels
-                found_valid = np.argwhere(padded_valid_mask[r_padded-search_range:r_padded+search_range+1,
-                                                            c_padded-search_range:c_padded+search_range+1])
-                if found_valid.size > 0:
-                    # Assuming the first found valid pixel is the one we want (for simplicity)
-                    first_valid_relative = found_valid[0]
-                    first_valid = (first_valid_relative[0] + r - search_range,
-                                first_valid_relative[1] + c - search_range)
-                    x_val, y_val, z_val = xyz_array[first_valid[0], first_valid[1], :]
-                    rospy.logwarn("found valid: %.2f, %.2f, %.2f",x_val, y_val, z_val)
-                else:
-                    rospy.logwarn("No valid neighbor found within the specified range.")
+                # center pose or corner pose is not real number, skip to next
+                # print(in)
+                # if not all_real(x_val, y_val, z_val) or skip_to_next_box or not inRange(x_val, y_val):
+                #print(x_val, y_val, z_val)
+                if not all_real(x_val, y_val, z_val):
+                    rospy.logwarn("pose not real (%.2f,%.2f,%.2f), looks surrounding", x_val, y_val, z_val)
                     continue
-            # if not then transform to the map frame
-            x, y, z = self.transform_point(x_val, y_val, z_val, "zed_left_camera_frame", "map")
-            # print(x_val, y_val, z_val,x, y, z)
-            # if too high, meaning out of reach
-            if z > self.z_constraint or x > 3.5 or x < 1.4:
-                rospy.logwarn("out of range")
-                continue
-            # debug
-            color = (0,0,0)
-            # print(box.boxes.cls.item())
-            if box.boxes.cls.item() == 1.0:
-                color = (0,255,0)
-            elif box.boxes.cls.item() == 0.0:
-                color = (0,0,255)
-            # print("class ", box.boxes.cls.item())
-            cv2.rectangle(self.rgb_map, cs[0], cs[2], color=color, thickness=2)
-            # check if it is near
-            for i in self.list_def_state:
-                # if near and same class
-                distance = euclidean_distance(i.getPose(), (x,y,z))
-                # rospy.logwarn("distance: %.2f, class: %.1f, %.1f",distance, box.boxes.cls.item(),i.getClass())
-                if distance < 1 and int(box.boxes.cls.item()) == int(i.getClass()):
-                    # break then skip
-                    _,_, w, h = loc.flatten().astype('int32')
-                    # update Pit 
-                    (w_old, h_old) = i.getWH()
-                    Pit = w_old * h_old * i.getP()
-                    # update Pi't 
-                    Pi_prime_t = (Pit + (w - w_old) * (h - h_old)) 
-                    # update B
-                    i.setB(   (((Pi_prime_t)/norm) * box.boxes.conf.item() * np.sum(self.prob_action[self.action]))  * i.getB()*10)
-                    i.setWH(w,h)
-                    i.setP(box.boxes.conf.item())
-                    skip_to_next_box = True
-                    break                
-            if skip_to_next_box:
-                continue    
-            # if meet all condition, then save it as a NEW
-            defect = obs_def_(self.index, box.boxes.cls.item(), box.boxes.conf.item(), loc.flatten().astype('int32'))
-            defect.setPose((x,y,z))
-            if self.vis_def_area:
-                defect.setCornersPose(corner_pose_list[0],corner_pose_list[1],corner_pose_list[2],corner_pose_list[3])
-            _,_, w, h = loc.flatten().astype('int32')
-            # initial
-            defect.setB(   (((w*h)/norm) * box.boxes.conf.item() * np.sum(self.prob_action[self.action]))  * defect.getB())
-            defect.setWH(w,h)
-            if self.robot_y > y:
-                # due to the set up of culvert, 0 can never = y since y is wall and robot can't have same position as
-                # wall unless it smash through it
-                reach = (x,y+(0.85*0.95),0) 
-            else:
-                reach = (x,y-(0.8*0.95),0) 
-            defect.setReach(reach)
-            # put in                 
-            self.list_def_state.append(defect)
-            self.index+=1
+                    xyz_array = np.squeeze(self.xyz_array)
+                    # print(xyz_array.shape)
+                    search_range = 10# Create a mask for valid and invalid pixels
+                    valid_mask = ~np.isnan(xyz_array).any(axis=-1) & ~np.isinf(xyz_array).any(axis=-1)# Handling the edge cases by padding the valid_mask
+                    padded_valid_mask = np.pad(valid_mask, pad_width=search_range, mode='constant', constant_values=False)# Finding a valid pixel:
+                    # Instead of looking for the first valid pixel in spatial order,
+                    # we identify any valid pixel within the range for demonstration purposes
+                    # due to the complexity of replicating the exact loop behavior vectorized
+                    r_padded, c_padded = r + search_range, c + search_range  # Adjust for padding offset# Search in the padded_valid_mask for valid pixels
+                    found_valid = np.argwhere(padded_valid_mask[r_padded-search_range:r_padded+search_range+1,
+                                                                c_padded-search_range:c_padded+search_range+1])
+                    if found_valid.size > 0:
+                        # Assuming the first found valid pixel is the one we want (for simplicity)
+                        first_valid_relative = found_valid[0]
+                        first_valid = (first_valid_relative[0] + r - search_range,
+                                    first_valid_relative[1] + c - search_range)
+                        x_val, y_val, z_val = xyz_array[first_valid[0], first_valid[1], :]
+                        rospy.logwarn("found valid: %.2f, %.2f, %.2f",x_val, y_val, z_val)
+                    else:
+                        rospy.logwarn("No valid neighbor found within the specified range.")
+                        continue
+                # if not then transform to the map frame
+                x, y, z = self.transform_point(x_val, y_val, z_val, "zed_left_camera_frame", "map")
+                # print(x_val, y_val, z_val,x, y, z)
+                # if too high, meaning out of reach
+                if z > self.z_constraint or x > 3.5 or x < 1.4:
+                    rospy.logwarn("out of range")
+                    continue
+                # debug
+                color = (0,0,0)
+                # print(box.boxes.cls.item())
+                if box.boxes.cls.item() == 1.0:
+                    color = (0,255,0)
+                elif box.boxes.cls.item() == 0.0:
+                    color = (0,0,255)
+                # print("class ", box.boxes.cls.item())
+                cv2.rectangle(self.rgb_map, cs[0], cs[2], color=color, thickness=2)
+                # check if it is near 
+                for i in self.list_def_state:
+                    # if near and same class
+                    distance = euclidean_distance(i.getPose(), (x,y,z))
+                    # rospy.logwarn("distance: %.2f, class: %.1f, %.1f",distance, box.boxes.cls.item(),i.getClass())
+                    # update if it is
+                    if distance < 1 and int(box.boxes.cls.item()) == int(i.getClass()):
+                        # break then skip
+                        _,_, w, h = loc.flatten().astype('int32')
+                        # update B
+                        i.update((x,y,z))
+                        i.setB(   (((w*h)/norm) * box.boxes.conf.item() * np.sum(self.prob_action[self.action]))  * i.getB()*4)
+                        updated_b.append(i.getIndex())
+                        skip_to_next_box = True
+                        break                
+                if skip_to_next_box:
+                    continue    
+                # if meet all condition, then save it as a NEW
+                defect = obs_def_(self.index, box.boxes.cls.item(), box.boxes.conf.item(), loc.flatten().astype('int32'))
+                defect.setPose((x,y,z))
+                defect.update((x,y,z),box.boxes.cls.item())
+                if self.vis_def_area:
+                    defect.setCornersPose(corner_pose_list[0],corner_pose_list[1],corner_pose_list[2],corner_pose_list[3])
+                _,_, w, h = loc.flatten().astype('int32')
+                defect.setB(   (((w*h)/norm) * box.boxes.conf.item() * np.sum(self.prob_action[self.action]))  * defect.getB())
+                if self.robot_y > y:
+                    # due to the set up of culvert, 0 can never = y since y is wall and robot can't have same position as
+                    # wall unless it smash through it
+                    reach = (x,y+(0.85*0.95),0) 
+                else:
+                    reach = (x,y-(0.8*0.95),0) 
+                defect.setReach(reach)
+                # put in                 
+                self.list_def_state.append(defect)
+                self.index+=1
+        # TODO: update U
+        for i in self.list_def_state:
+            if i.getIndex() not in updated_b:
+                i.update(None)
         # print(len(self.def_index_black_list))
         # print(len(self.list_def_state))
         # rospy.logwarn("index: %d", self.index)
@@ -696,6 +763,7 @@ class defect_detection:
         
         # rospy.logwarn("test")
         # self.goTo(0.3,0.3)
+        self.k = (rospy.Time.now() - self.begin).to_sec()
         if self.action == 1:
             # while True:
             #     if getKey() == '0':
@@ -718,10 +786,10 @@ class defect_detection:
             # rospy.logwarn("go")
             # RVIZ
             if self.vis_def_area or self.vis_reach:
-                print("Belief")
+                # print("Belief")
                 for de in self.list_def_state:
                     self.visualizeDefect(de)
-                    print(de.getB())
+                    # print(de.getB())
                 if self.vis_def_area:
                     self.vis_pub.publish(self.border_ar)
                 if self.vis_reach:
@@ -753,9 +821,9 @@ class defect_detection:
             if (self.goTo(goal_x, goal_y)):
                 rospy.logwarn("REACH GOAL %d", closest_index)
                 # if reach, next action which is turning
-                if self.list_def_state[closest_index].getB() > 1:
+                if self.list_def_state[closest_index].getMaxB() > 0.8:
                     self.action = 1
-                    self.reward += (100 + 5) * self.discount
+                    self.reward += (100 + 5) * (self.discount **self.k)
                 else:
                     print("B not high enough")
                 
