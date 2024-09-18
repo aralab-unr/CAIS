@@ -59,4 +59,4 @@ Indoor            |  Outdoor
 
 ## Contact
 - [Chuong Le](mailto:chuongl@unr.edu)
-- [Hung La](mailto:hla@nevada.unr.edu)
+- [Hung La](mailto:hla@unr.edu)
